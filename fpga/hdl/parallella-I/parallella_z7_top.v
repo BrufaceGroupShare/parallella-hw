@@ -228,6 +228,9 @@ module parallella_z7_top (/*AUTO ARG*/
    wire			processing_system7_0_S_AXI_HP1_WVALID_pin;// From parallella of parallella.v
    wire			reset_chip;		// From parallella of parallella.v
    wire			reset_fpga;		// From parallella of parallella.v
+   wire [7:0] sampler_0_DBG_pin;
+   wire [63:0] sampler_0_INPUT_pin;
+   reg [31:0] test_counter;
    // End of automatics
 
    wire [47:0]  processing_system7_0_GPIO_I_pin;
@@ -238,6 +241,12 @@ module parallella_z7_top (/*AUTO ARG*/
    assign processing_system7_0_GPIO_O_pin = 47'd0;
    assign processing_system7_0_GPIO_T_pin = 47'hFFFF_FFFF_FFFF;
 `endif
+    assign processing_system7_0_GPIO_O_pin = sampler_0_DBG_pin;
+    assign processing_system7_0_GPIO_T_pin = 47'hFFFF_FFFF_FF00;
+
+//    assign sampler_0_INPUT_pin = { 15'd0, processing_system7_0_GPIO_I_pin };
+   assign sampler_0_INPUT_pin = { ~test_counter, test_counter };
+ 
 
    //###########
    //# REGS
@@ -376,6 +385,7 @@ module parallella_z7_top (/*AUTO ARG*/
 
    always @ (posedge sys_clk)
      begin
+        test_counter <= test_counter + 1;
         if (por_cnt[19:0] == 20'hff13f)//stop count, deassert reset  
           begin   
              por_reset     <= 1'b0;
@@ -548,9 +558,9 @@ module parallella_z7_top (/*AUTO ARG*/
                .axi_spdif_tx_0_spdif_tx_o_pin(hdmi_spdif),
 `endif  // FEATURE_HDMI
 `ifdef FEATURE_GPIO_EMIO
-               .processing_system7_0_GPIO_I_pin(processing_system7_0_GPIO_I_pin),
-               .processing_system7_0_GPIO_O_pin(processing_system7_0_GPIO_O_pin),
-               .processing_system7_0_GPIO_T_pin(processing_system7_0_GPIO_T_pin),
+//               .processing_system7_0_GPIO_I_pin(processing_system7_0_GPIO_I_pin),
+//               .processing_system7_0_GPIO_O_pin(processing_system7_0_GPIO_O_pin),
+//               .processing_system7_0_GPIO_T_pin(processing_system7_0_GPIO_T_pin),
 `endif  // FEATURE_GPIO_EMIO
 			   /*AUTOINST*/
 			   // Outputs
@@ -656,7 +666,10 @@ module parallella_z7_top (/*AUTO ARG*/
 			   .processing_system7_0_S_AXI_HP1_AWID_pin(processing_system7_0_S_AXI_HP1_AWID_pin[5:0]),
 			   .processing_system7_0_S_AXI_HP1_WID_pin(processing_system7_0_S_AXI_HP1_WID_pin[5:0]),
 			   .processing_system7_0_S_AXI_HP1_WDATA_pin(processing_system7_0_S_AXI_HP1_WDATA_pin[63:0]),
-			   .processing_system7_0_S_AXI_HP1_WSTRB_pin(processing_system7_0_S_AXI_HP1_WSTRB_pin[7:0]));
+			   .processing_system7_0_S_AXI_HP1_WSTRB_pin(processing_system7_0_S_AXI_HP1_WSTRB_pin[7:0]),
+			   .sampler_0_INPUT_pin(sampler_0_INPUT_pin),
+			   .sampler_0_DBG_pin(sampler_0_DBG_pin)
+			   );
    
 endmodule // parallella_z7_top
 

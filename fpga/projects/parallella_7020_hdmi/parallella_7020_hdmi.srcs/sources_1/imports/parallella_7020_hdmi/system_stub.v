@@ -35,7 +35,6 @@ module system_stub
     processing_system7_0_M_AXI_GP1_ARESETN_pin,
     processing_system7_0_S_AXI_HP1_ARESETN_pin,
     processing_system7_0_FCLK_CLK3_pin,
-    processing_system7_0_FCLK_CLK0_pin,
     processing_system7_0_M_AXI_GP1_ARVALID_pin,
     processing_system7_0_M_AXI_GP1_AWVALID_pin,
     processing_system7_0_M_AXI_GP1_BREADY_pin,
@@ -117,7 +116,10 @@ module system_stub
     axi_spdif_tx_0_spdif_tx_o_pin,
     processing_system7_0_GPIO_I_pin,
     processing_system7_0_GPIO_O_pin,
-    processing_system7_0_GPIO_T_pin
+    processing_system7_0_GPIO_T_pin,
+    processing_system7_0_FCLK_CLK0_pin,
+    sampler_0_DBG_pin,
+    sampler_0_INPUT_pin
   );
   inout [53:0] processing_system7_0_MIO;
   input processing_system7_0_PS_SRSTB_pin;
@@ -150,7 +152,6 @@ module system_stub
   output processing_system7_0_M_AXI_GP1_ARESETN_pin;
   output processing_system7_0_S_AXI_HP1_ARESETN_pin;
   output processing_system7_0_FCLK_CLK3_pin;
-  output processing_system7_0_FCLK_CLK0_pin;
   output processing_system7_0_M_AXI_GP1_ARVALID_pin;
   output processing_system7_0_M_AXI_GP1_AWVALID_pin;
   output processing_system7_0_M_AXI_GP1_BREADY_pin;
@@ -233,6 +234,9 @@ module system_stub
   input [47:0] processing_system7_0_GPIO_I_pin;
   output [47:0] processing_system7_0_GPIO_O_pin;
   output [47:0] processing_system7_0_GPIO_T_pin;
+  output processing_system7_0_FCLK_CLK0_pin;
+  output [7:0] sampler_0_DBG_pin;
+  input [63:0] sampler_0_INPUT_pin;
 
   (* BOX_TYPE = "user_black_box" *)
   system
@@ -268,7 +272,6 @@ module system_stub
       .processing_system7_0_M_AXI_GP1_ARESETN_pin ( processing_system7_0_M_AXI_GP1_ARESETN_pin ),
       .processing_system7_0_S_AXI_HP1_ARESETN_pin ( processing_system7_0_S_AXI_HP1_ARESETN_pin ),
       .processing_system7_0_FCLK_CLK3_pin ( processing_system7_0_FCLK_CLK3_pin ),
-      .processing_system7_0_FCLK_CLK0_pin ( processing_system7_0_FCLK_CLK0_pin ),
       .processing_system7_0_M_AXI_GP1_ARVALID_pin ( processing_system7_0_M_AXI_GP1_ARVALID_pin ),
       .processing_system7_0_M_AXI_GP1_AWVALID_pin ( processing_system7_0_M_AXI_GP1_AWVALID_pin ),
       .processing_system7_0_M_AXI_GP1_BREADY_pin ( processing_system7_0_M_AXI_GP1_BREADY_pin ),
@@ -350,7 +353,10 @@ module system_stub
       .axi_spdif_tx_0_spdif_tx_o_pin ( axi_spdif_tx_0_spdif_tx_o_pin ),
       .processing_system7_0_GPIO_I_pin ( processing_system7_0_GPIO_I_pin ),
       .processing_system7_0_GPIO_O_pin ( processing_system7_0_GPIO_O_pin ),
-      .processing_system7_0_GPIO_T_pin ( processing_system7_0_GPIO_T_pin )
+      .processing_system7_0_GPIO_T_pin ( processing_system7_0_GPIO_T_pin ),
+      .processing_system7_0_FCLK_CLK0_pin ( processing_system7_0_FCLK_CLK0_pin ),
+      .sampler_0_DBG_pin ( sampler_0_DBG_pin ),
+      .sampler_0_INPUT_pin ( sampler_0_INPUT_pin )
     );
 
 endmodule

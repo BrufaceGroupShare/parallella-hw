@@ -116,6 +116,8 @@
  PORT processing_system7_0_GPIO_O_pin = processing_system7_0_GPIO_O, DIR = O, VEC = [47:0]
  PORT processing_system7_0_GPIO_T_pin = processing_system7_0_GPIO_T, DIR = O, VEC = [47:0]
  PORT processing_system7_0_FCLK_CLK0_pin = processing_system7_0_FCLK_CLK0_0, DIR = O, SIGIS = CLK, CLK_FREQ = 100000000
+ PORT sampler_0_DBG_pin = sampler_0_DBG, DIR = O, VEC = [7:0]
+ PORT sampler_0_INPUT_pin = sampler_0_INPUT, DIR = I, VEC = [63:0]
 
 
 BEGIN processing_system7
@@ -391,9 +393,9 @@ END
 BEGIN axi_spdif_tx
  PARAMETER INSTANCE = axi_spdif_tx_0
  PARAMETER HW_VER = 1.00.a
+ PARAMETER C_DMA_TYPE = 1
  PARAMETER C_BASEADDR = 0x75c00000
  PARAMETER C_HIGHADDR = 0x75c0ffff
- PARAMETER C_DMA_TYPE = 1
  BUS_INTERFACE S_AXI = axi_interconnect_1
  PORT S_AXI_ACLK = processing_system7_0_FCLK_CLK0_0
  PORT spdif_tx_o = axi_spdif_tx_0_spdif_tx_o
@@ -415,5 +417,16 @@ BEGIN clock_generator
  PORT CLKOUT0 = clock_generator_0_CLKOUT0
  PORT RST = net_gnd
  PORT CLKIN = processing_system7_0_FCLK_CLK0_0
+END
+
+BEGIN sampler
+ PARAMETER INSTANCE = sampler_0
+ PARAMETER HW_VER = 1.00.a
+ PARAMETER C_S_AXI_MEM0_BASEADDR = 0x40000000
+ PARAMETER C_S_AXI_MEM0_HIGHADDR = 0x41FFFFFF
+ BUS_INTERFACE S_AXI = axi_interconnect_1
+ PORT S_AXI_ACLK = processing_system7_0_FCLK_CLK0_0
+ PORT INPUT = sampler_0_INPUT
+ PORT DBG = sampler_0_DBG
 END
 
