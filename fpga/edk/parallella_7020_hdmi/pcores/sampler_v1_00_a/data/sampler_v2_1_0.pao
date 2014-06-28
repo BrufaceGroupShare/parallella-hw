@@ -1,0 +1,10 @@
+##############################################################################
+## Filename:          C:/users/frank/documents/github/parallella-hw/fpga/edk/parallella_7020_hdmi/pcores/sampler_v1_00_a/data/sampler_v2_1_0.pao
+## Description:       Peripheral Analysis Order
+## Date:              Thu Jun 26 10:19:00 2014 (by Create and Import Peripheral Wizard)
+##############################################################################
+
+lib proc_common_v3_00_a  all 
+lib axi_slave_burst_v1_00_a  all 
+lib sampler_v1_00_a user_logic vhdl
+lib sampler_v1_00_a sampler vhdl

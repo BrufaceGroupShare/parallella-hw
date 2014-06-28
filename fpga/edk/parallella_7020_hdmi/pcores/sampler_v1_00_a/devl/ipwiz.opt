@@ -1,0 +1,10 @@
+-batch 
+-create sampler 
+-ver 1.00.a 
+-dir "C:\users\frank\documents\github\parallella-hw\fpga\edk\parallella_7020_hdmi" 
+-lang vhdl 
+-bus axi4 s 
+-burst s 32 
+-arn 1 
+-xps 
+-driver 
