@@ -23,7 +23,8 @@
 -- bit is set in the control register and for each new sample, TRIGGER_DELAY is
 -- decremented. When TRIGGER_DELAY is 0, the sampling is stopped. This can be used
 -- to set the sample position, to determine how many samples after and before a trigger
--- should be available.
+-- should be available. TRIGGER_HOLDOFF is the number of samples for which the trigger
+-- condition is ignored after starting the sampler.
 --
 -- The trigger bit in the control register has to be reset by software. You can set
 -- the trigger bit as well, e.g. to sample a fixed number of samples after starting
@@ -185,19 +186,22 @@ architecture IMP of user_logic is
 	-- number of words to sample after trigger detection and until stop
 	constant TRIGGER_DELAY : integer := 11;
 
-	-- number of sampled words since last start (this counter stops at 0x4000)
-	constant SAMPLE_COUNTER : integer := 12;
+	-- number of words to sample after trigger detection and until stop
+	constant TRIGGER_HOLDOFF : integer := 12;
+
+	-- number of sampled words since last start (this counter stops at 0x8000)
+	constant SAMPLE_COUNTER : integer := 13;
 
 	-- current input levels
-	constant INPUT_STATE_LOW  : integer := 13;
-	constant INPUT_STATE_HIGH : integer := 14;
+	constant INPUT_STATE_LOW  : integer := 14;
+	constant INPUT_STATE_HIGH : integer := 15;
 
 	-- 32 bit test counter
-	constant TEST_COUNTER : integer := 15;
+	constant TEST_COUNTER : integer := 16;
 
 	-- ID/version of this module (high word: always 1 / low word: version)
 	constant VERSION       : integer                       := 31;
-	constant VERSION_VALUE : std_logic_vector(31 downto 0) := X"00010002";
+	constant VERSION_VALUE : std_logic_vector(31 downto 0) := X"00010003";
 
 	signal control_reg            : std_logic_vector(31 downto 0);
 	signal write_index_reg        : std_logic_vector(31 downto 0);
@@ -207,6 +211,7 @@ architecture IMP of user_logic is
 	signal trigger_mask_reg       : std_logic_vector(63 downto 0);
 	signal trigger_pattern_reg    : std_logic_vector(63 downto 0);
 	signal trigger_delay_reg      : std_logic_vector(31 downto 0);
+	signal trigger_holdoff_reg    : std_logic_vector(31 downto 0);
 	signal sample_counter_reg     : std_logic_vector(31 downto 0);
 	signal input_state_reg        : std_logic_vector(63 downto 0);
 	signal test_counter_reg       : std_logic_vector(31 downto 0);
@@ -323,6 +328,8 @@ begin
 						mem_ip2bus_data <= trigger_pattern_reg(63 downto 32);
 					when conv_std_logic_vector(TRIGGER_DELAY, 5) =>
 						mem_ip2bus_data <= trigger_delay_reg;
+					when conv_std_logic_vector(TRIGGER_HOLDOFF, 5) =>
+						mem_ip2bus_data <= trigger_holdoff_reg;
 					when conv_std_logic_vector(SAMPLE_COUNTER, 5) =>
 						mem_ip2bus_data <= sample_counter_reg;
 					when conv_std_logic_vector(TEST_COUNTER, 5) =>
@@ -355,6 +362,7 @@ begin
 				trigger_mask_reg <= (others => '0');
 				trigger_pattern_reg <= (others => '0');
 				trigger_delay_reg <= (others => '0');
+				trigger_holdoff_reg <= (others => '0');
 				sample_counter_reg <= (others => '0');
 				test_counter_reg <= (others => '0');
 				samplerate_counter <= (others => '0');
@@ -398,6 +406,8 @@ begin
 								trigger_pattern_reg(63 downto 32) <= Bus2IP_Data;
 							when conv_std_logic_vector(TRIGGER_DELAY, 5) =>
 								trigger_delay_reg <= Bus2IP_Data;
+							when conv_std_logic_vector(TRIGGER_HOLDOFF, 5) =>
+								trigger_holdoff_reg <= Bus2IP_Data;
 							when conv_std_logic_vector(SAMPLE_COUNTER, 5) =>
 								sample_counter_reg <= Bus2IP_Data;
 							when conv_std_logic_vector(TEST_COUNTER, 5) =>
@@ -428,31 +438,35 @@ begin
 					write_enable   <= '1';
 
 					-- trigger logic
-					if trigger_mask_reg > 0 then
-						if (input_state_reg and trigger_mask_reg) = trigger_pattern_reg then
-							control_reg(1) <= '1';
-						end if;
-					end if;
-					for i in 0 to 63 loop
-						if rising_trigger_reg(i) = '1' then
-							if last_input_state(i) = '0' and input_state_reg(i) = '1' then
+					if trigger_holdoff_reg > 0 then
+						trigger_holdoff_reg <= trigger_holdoff_reg - 1;
+					else
+						if trigger_mask_reg > 0 then
+							if (input_state_reg and trigger_mask_reg) = trigger_pattern_reg then
 								control_reg(1) <= '1';
 							end if;
 						end if;
-						if falling_trigger_reg(i) = '1' then
-							if last_input_state(i) = '1' and input_state_reg(i) = '0' then
-								control_reg(1) <= '1';
+						for i in 0 to 63 loop
+							if rising_trigger_reg(i) = '1' then
+								if last_input_state(i) = '0' and input_state_reg(i) = '1' then
+									control_reg(1) <= '1';
+								end if;
 							end if;
-						end if;
-					end loop;
-
-					-- sample trigger_delay_reg samples more after the trigger
-					if control_reg(1) = '1' then
-						if trigger_delay_reg > 0 then
-							-- stop sampling
-							control_reg(0) <= '0';
-						else
-							trigger_delay_reg <= trigger_delay_reg - 1;
+							if falling_trigger_reg(i) = '1' then
+								if last_input_state(i) = '1' and input_state_reg(i) = '0' then
+									control_reg(1) <= '1';
+								end if;
+							end if;
+						end loop;
+	
+						-- sample trigger_delay_reg samples more after the trigger
+						if control_reg(1) = '1' then
+							if trigger_delay_reg > 0 then
+								trigger_delay_reg <= trigger_delay_reg - 1;
+							else
+								-- stop sampling
+								control_reg(0) <= '0';
+							end if;
 						end if;
 					end if;
 				end if;

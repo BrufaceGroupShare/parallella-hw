@@ -19,16 +19,8 @@
 // default TCP socket type
 #define DEFAULT_PROTO SOCK_STREAM
 
-/* reset analyzer */
-#define CMD_RESET 0x00
-/* arm trigger / run device */
-#define CMD_RUN 0x01
-/* ask for device id */
-#define CMD_ID 0x02
-/* ask for device meta data. */
-#define CMD_METADATA 0x04
-/* ask the device to immediately return its RLE-encoded data. */
-#define CMD_RLE_FINISH_NOW 0x05
+#define CMD_READ_BUFFER 0x01
+#define CMD_START_SAMPLING 0x02
 
 int sampler;
 
@@ -117,10 +109,54 @@ void driverTest()
 	}
 }
 
+void startSampling(uint64_t fallingTrigger, uint64_t risingTrigger)
+{
+	int i;
+	printf("hardware ID and version: %08x\n", samplerReadReg(VERSION));
+	
+	// stop previous sampling, if running
+	samplerWriteReg(CONTROL, 0);
+
+	// set triggers
+	samplerWriteReg(TRIGGER_MASK_LOW, 0);
+	samplerWriteReg(TRIGGER_MASK_HIGH, 0);
+	samplerWriteReg(RISING_TRIGGER_LOW, risingTrigger & 0xffffffff);
+	samplerWriteReg(RISING_TRIGGER_HIGH, (risingTrigger >> 32) & 0xffffffff);
+	samplerWriteReg(FALLING_TRIGGER_LOW, fallingTrigger & 0xffffffff);
+	samplerWriteReg(FALLING_TRIGGER_HIGH, (fallingTrigger >> 32) & 0xffffffff);
+
+	// reset counters
+	samplerWriteReg(SAMPLE_COUNTER, 0);
+	samplerWriteReg(WRITE_INDEX, 0);
+	
+	// set samplerate to 100 MHz (100 / (0+1))
+	samplerWriteReg(SAMPLERATE_DIVIDER, 0);
+
+	if (risingTrigger == ((uint64_t) 0) && fallingTrigger == ((uint64_t) 0)) {
+		// set trigger delay to full sample memory
+		samplerWriteReg(TRIGGER_DELAY, 32768);
+
+		// trigger immediatly
+		samplerWriteReg(TRIGGER_HOLDOFF, 0);
+
+		// start sampling, with trigger bit triggered, if no trigger was set
+		samplerWriteReg(CONTROL, 3);
+	} else {
+		// set trigger delay to middle of sample memory
+		samplerWriteReg(TRIGGER_DELAY, 16384);
+
+		// trigger not before half of the memory is full
+		samplerWriteReg(TRIGGER_HOLDOFF, 16384);
+
+		// start sampling
+		samplerWriteReg(CONTROL, 1);
+	}
+}
+
 int main(int argc, char **argv)
 {
 	char rxbuffer[1024];
-	char txbuffer[4096];
+	char txbuffer[262144];
 	char *ip_address = NULL;
 	unsigned short port = DEFAULT_PORT;
 	int retval;
@@ -144,8 +180,8 @@ int main(int argc, char **argv)
 		fprintf(stderr,"error opening /dev/sampler: %s\n", strerror(errno));
 		return -1;
 	}
-	driverTest();
-	return 0;
+//	driverTest();
+//	return 0;
 
 	// turn off output buffering
 	setvbuf(stdout, 0, _IONBF, 0);
@@ -229,113 +265,79 @@ int main(int argc, char **argv)
 				break;
 			}
 			printf("Server: Received %d bytes from client\n", retval);
-			for (i = 0; i < retval; i++) {
-				printf("  byte received from OLS client: %02x", (unsigned char)rxbuffer[i]);
-				lastByte = (unsigned char)rxbuffer[i];
-				if ((longCommand == false) && (lastByte & 0x80)) {
-					longCommand = true;
-					longCommandBytecount = 0;
-					longCommandData[longCommandBytecount++] = lastByte;
-				} else if (longCommand == true) {
-					longCommandData[longCommandBytecount++] = lastByte;
-					if (longCommandBytecount == 5) {
-						longCommand = false;
-						if (longCommandData[0] == 0x81) { //size
-							sampleSize = 4 * ((int)longCommandData[2] * 256 + longCommandData[1] + 1);
-							printf(" Sample size = %d", sampleSize);
-						} else if (longCommandData[0] == 0x84) { //extended size
-							sampleSize = 4 * ((int)longCommandData[4] * 256 * 256 * 256 + (int)longCommandData[3] * 256 * 256 + (int)longCommandData[2] * 256 + longCommandData[1] + 1);
-							printf(" Sample size = %d", sampleSize);
-						} else if (longCommandData[0] == 0x82) { //channel disable
-							chEnable0 = (~longCommandData[1] >> 2) & 0x1;
-							chEnable1 = (~longCommandData[1] >> 3) & 0x1;
-							chEnable2 = (~longCommandData[1] >> 4) & 0x1;
-							chEnable3 = (~longCommandData[1] >> 5) & 0x1;
-							sampleBytes = chEnable0 + chEnable1 + chEnable2 + chEnable3;
-							printf(" Bytes per sample = %d", sampleBytes);
-						}
-					}
+			if (rxbuffer[0] == CMD_START_SAMPLING) {
+				uint64_t rising = 0;
+				uint64_t falling = 0;
+				int j = 1;
+				printf("bytes received: %d\n", retval);
+				for (i = 0; i < 8; i++) {
+					rising >>= 8;
+					rising |= ((uint64_t)rxbuffer[j++]) << 56;
 				}
-				printf("\n");
+				for (i = 0; i < 8; i++) {
+					falling >>= 8;
+					falling |= ((uint64_t)rxbuffer[j++]) << 56;
+				}
+
+				// sample 32 k samples
+				startSampling(falling, rising);
+				
 			}
-
-			if (lastByte == CMD_ID) { // ID request
-				printf("Server: Requesting ID data.\n");
-				txbuffer[0] = 0x31;
-				txbuffer[1] = 0x41;
-				txbuffer[2] = 0x4c;
-				txbuffer[3] = 0x53;
-				retval = send(msgsock, txbuffer, 4, 0);
-				if (retval < 0) {
-					fprintf(stderr,"Server: send() failed: error %s\n", strerror(errno));
+			if (rxbuffer[0] == CMD_READ_BUFFER) {
+				char* sendptr = txbuffer;
+				uint32_t start;
+				
+				// wait for end
+				for (i = 0; i < 10; i++) {
+					if ((samplerReadReg(CONTROL) & 1) == 0) break;
+					usleep(10000);
+				}
+				
+				if (samplerReadReg(CONTROL) & 1) {
+					// send timeout, if not triggered
+					printf("timeout\n");
+					txbuffer[0] = 0;
+					send(msgsock, txbuffer, 1, 0);
 				} else {
-					printf("Server: send() is OK.\n");
+					// no timeout
+					printf("triggered\n");
+					txbuffer[0] = 1;
+					send(msgsock, txbuffer, 1, 0);
 				}
-			} else if (lastByte == CMD_METADATA) { // metadata request
-				int c = 0;
-				const char* deviceType = "Parallella Analyzer";
-				int samplememory = 0x10000;
-				int samplerate = 100*1000*1000;
-				printf("Server: Requesting meta data.\n");
-				/* device name */
-				txbuffer[c++] = 0x01;
-				while (*deviceType) {
-					txbuffer[c++] = *deviceType;
-					deviceType++;
-				}
-				txbuffer[c++] = 0x00;
 
-				/* firmware version */
-				txbuffer[c++] = 0x02;
-				txbuffer[c++] = '0';
-				txbuffer[c++] = '.';
-				txbuffer[c++] = '1';
-				txbuffer[c++] = 0x00;
-
-				/* sample memory */
-				txbuffer[c++] = 0x21;
-				txbuffer[c++] = 0x00;
-				txbuffer[c++] = 0x00;
-				/* 7168 bytes */
-				txbuffer[c++] = samplememory >> 8;
-				txbuffer[c++] = samplememory & 0xff;
-
-				/* sample rate (4MHz) */
-				txbuffer[c++] = 0x23;
-				txbuffer[c++] = samplerate >> 24;
-				txbuffer[c++] = (samplerate >> 16) & 0xff;
-				txbuffer[c++] = (samplerate >> 8) & 0xff;
-				txbuffer[c++] = samplerate & 0xff;
-
-				/* number of probes: 48 */
-				txbuffer[c++] = 0x40;
-				txbuffer[c++] = 8;
-
-				/* protocol version (2 */
-				txbuffer[c++] = 0x41;
-				txbuffer[c++] = 0x02;
-
-				/* end of data */
-				txbuffer[c++] = 0x00;
-
-				retval = send(msgsock, txbuffer, c, 0);
-				if (retval < 0) {
-					fprintf(stderr,"Server: send() failed: error %s\n", strerror(errno));
-				} else {
-					printf("Server: send() is OK.\n");
-					close(msgsock);
-					break;
-				}
-			} else if (lastByte == CMD_RUN) { // trigger request
-				request_size = 1024;
-				bytes_left = sampleBytes * sampleSize;
+				// send data
+				bytes_left = 262144;
 				printf("Server: Requesting logger data (%d bytes).\n", bytes_left);
+
+				start = samplerReadReg(WRITE_INDEX);
+				printf("start: %04x\n", start);
+				printf("samples: %04x\n", samplerReadReg(SAMPLE_COUNTER));
+				printf("holdoff: %04x\n", samplerReadReg(TRIGGER_HOLDOFF));
+				printf("delay: %04x\n", samplerReadReg(TRIGGER_DELAY));
+				printf("control: %08x\n", samplerReadReg(CONTROL));
+				for (i = 0; i < bytes_left / 8; i++) {
+					uint32_t a;
+					uint32_t b;
+					if (start >= 0x8000) start = 0;
+					a = samplerReadMem(2*start);
+					b = samplerReadMem(2*start + 1);
+					start++;
+					txbuffer[i * 8] = a & 0xff;
+					txbuffer[i * 8 + 1] = (a >> 8) & 0xff;
+					txbuffer[i * 8 + 2] = (a >> 16) & 0xff;
+					txbuffer[i * 8 + 3] = (a >> 24) & 0xff;
+					txbuffer[i * 8 + 4] = b & 0xff;
+					txbuffer[i * 8 + 5] = (b >> 8) & 0xff;
+					txbuffer[i * 8 + 6] = (b >> 16) & 0xff;
+					txbuffer[i * 8 + 7] = (b >> 24) & 0xff;
+				}
 				while (1) {
-					retval = send(msgsock, txbuffer, request_size, 0);
+					retval = send(msgsock, sendptr, bytes_left, 0);
 					if (retval < 0) {
 						fprintf(stderr,"Server: send() failed: error %s\n", strerror(errno));
 					}
-					bytes_left -= request_size;
+					bytes_left -= retval;
+					sendptr += retval;
 					if (bytes_left == 0) {
 						printf("Server: All logger data sent to OLS client.\n");
 						break;
